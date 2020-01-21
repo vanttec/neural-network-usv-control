@@ -1,8 +1,10 @@
 from boat import Boat
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+#import tensorflow as tf2
 import matplotlib.pyplot as plt
 
+tf.disable_eager_execution()
 
 def weight_variable(shape):
     '''Create a weight variable for a neural network
@@ -21,7 +23,7 @@ class BPTT_Controller():
     '''Implements an Actor Neural Network controller trained with
     Backpropagation Through Time'''
 
-    def __init__(self, boat, train=False, num_hidden_units=[8, 8], batch_size=10, graph_timesteps=20,
+    def __init__(self, boat, train=True, num_hidden_units=[8, 8], batch_size=10, graph_timesteps=20,
                  discount_factor=1.0, train_dt=0.25, train_iterations=1000, model_name=None, graphical=True):
         '''Initialize parameters
         Params
@@ -136,6 +138,9 @@ class BPTT_Controller():
         h1 = tf.tanh(tf.matmul(state, self.W1) + self.b1)
         h2 = tf.tanh(tf.matmul(tf.concat([state, h1], axis=1), self.W2) + self.b2)
         action = tf.matmul(tf.concat([state, h1, h2], axis=1), self.W3) + self.b3
+        
+        action = tf.tanh(action)*35
+
         return action
 
     def get_reward(self, state):
@@ -420,6 +425,6 @@ upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
 # Create objects
 boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64],
-                       graph_timesteps=100, train_dt=0.05, train_iterations=1000)
+ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[8, 8],
+                       graph_timesteps=1000, train_dt=0.01, train_iterations=1000)
 ctrl.save_model('example')
