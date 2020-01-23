@@ -75,7 +75,9 @@ class BPTT_Controller():
         ======
             1D numpy array: train target
         '''
-        train_target = self.boat.random_eta_limits[0:2].copy()
+        speed_target = self.boat.random_upsilon_limits[0].copy()
+        heading_target = self.boat.random_eta_limits[2].copy()
+        train_target = [speed_target, heading_target]
         for i in range(2):
             train_target[i] = train_target[i][0] + train_target[i][1]
         return np.array(train_target)
@@ -153,10 +155,11 @@ class BPTT_Controller():
         ======
             rank-1 tensor, reward
         '''
-        position = state[:, 0:2]
-        # orientation = state[:, 2]
+        #speed = state[:,3]
+        #heading = state[:,2]
+        actual = state[:,2:4]
         # Distance between train target and current position
-        reward = -tf.sqrt(tf.reduce_sum(tf.square(self.train_target - position), axis=1))
+        reward = -tf.sqrt(tf.reduce_sum(tf.square(self.train_target - actual), axis=1))
         # reward -= tf.norm(orientation, axis=1)
         return reward
 
@@ -241,8 +244,7 @@ class BPTT_Controller():
         eta = tf.reshape(eta, [self.batch_size, 3, 1])
         eta = (self.train_dt)*eta_dot + eta  # integral
 
-        lol= tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi))#, (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
-        #eta[:, 2] = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi), (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
+        # eta[:, 2] = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi))
         #    eta[2] = (self.eta[2]/abs(self.eta[2]))*(abs(self.eta[2])-2*np.pi)
 
         eta = tf.reshape(eta, [self.batch_size, 3])
@@ -417,7 +419,7 @@ xlim = [-2.5, 2.5]
 ylim = [-2.5, 2.5]
 yawlim = [-np.pi, np.pi]
 # Random upsilon limits
-xvel_lim = [-0.0, 0.0]
+xvel_lim = [-0.0, 1]
 yvel_lim = [-0.0, 0.0]
 yaw_ang_vel_lim = [-0.0, 0.0]
 # Lists of parameters
@@ -427,5 +429,5 @@ upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
 boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
 ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[8, 8],
-                       graph_timesteps=500, train_dt=0.01, train_iterations=500)
+                       graph_timesteps=100, train_dt=0.01, train_iterations=1000)
 ctrl.save_model('example')
