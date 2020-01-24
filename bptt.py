@@ -241,9 +241,23 @@ class BPTT_Controller():
         eta = tf.reshape(eta, [self.batch_size, 3, 1])
         eta = (self.train_dt)*eta_dot + eta  # integral
 
-        lol= tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi))#, (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
+        print(eta[:,2])
+        eta_ajust = tf.cond((tf.abs(eta[:, 2])> np.pi), lambda: tf.multiply((eta[:,2]/tf.abs(eta[:,2])),(tf.abs(eta[:,2])-2*np.pi)), lambda: eta[:,2])
+        #print(lol)
+        values = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi))#, (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
         #eta[:, 2] = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi), (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
         #    eta[2] = (self.eta[2]/abs(self.eta[2]))*(abs(self.eta[2])-2*np.pi)
+        #a_list = tf.unstack(eta)
+        #print(a_list)
+        #a_list[:,2]=lol
+        indices = [[tf.range(10),2]]  # A list of coordinates to update.
+
+        shape = [10, 3]  # The shape of the corresponding dense tensor, same as `c`.
+
+        delta = tf.SparseTensor(indices, values, shape)
+
+        result = eta + tf.sparse_tensor_to_dense(delta)
+        #https://stackoverflow.com/questions/34685947/adjust-single-value-within-tensor-tensorflow
 
         eta = tf.reshape(eta, [self.batch_size, 3])
         upsilon = tf.reshape(upsilon, [self.batch_size, 3])

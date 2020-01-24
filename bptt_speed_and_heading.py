@@ -319,6 +319,7 @@ class BPTT_Controller():
         iterations = []
         average_total_rewards = []
         for i in range(train_iterations + 1):
+            #print(train_iterations)
             # Get results
             actions, rewards, trajectory, average_total_reward = self.sess.run(
                 [self.actions, self.rewards, self.trajectory, self.average_total_reward],
