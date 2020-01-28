@@ -10,10 +10,6 @@ from boat import Boat
 tf.disable_eager_execution()
 
 
-
-
-
-
 MAX_EPSILON = 1
 MIN_EPSILON = 0.01
 LAMBDA = 0.0001
