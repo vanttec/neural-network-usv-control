@@ -413,7 +413,7 @@ class BPTT_Controller():
         '''
         state = self.boat.state.copy()
         print(state)
-        state[0:3] -= (target - self.train_target)
+        state[0:2] -= (target - self.train_target)
         action = self.run_numpy_action_network(state)
         rotor_speeds = to_rotor_speeds(self.boat.physics.hover_rotor_speed, *action)
         return rotor_speeds
@@ -423,6 +423,9 @@ class BPTT_Controller():
         between simulations (e.g. initial error and integral in a PID controller)
         It is not necessary to implement for a trained neural network'''
         pass
+
+    def __del__(self):
+       print("Destructor called")
 
 
 '''To train'''
@@ -438,9 +441,20 @@ yaw_ang_vel_lim = [-0.0, 0.0]
 # Lists of parameters
 eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
-# Create objects
-boat = Boat(random_eta_limits=eta_limits,
-            random_upsilon_limits=upsilon_limits)
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64],
-                       graph_timesteps=400, train_dt=0.02, train_iterations=2000, model_name='example')
-ctrl.save_model('example')
+#Loop for shuffling initial parameters
+total_iterations=50000
+train_iterations= 2000
+cycles = total_iterations/train_iterations
+for k in range(int(cycles)):
+    n=(k)*train_iterations+32000
+    if k==0:
+        model_name='example32000'
+    else: 
+        model_name='example'+ str(n)
+    # Create objects
+    boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
+    ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=400, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
+    ctrl.save_model('example'+ str(n+train_iterations))
+    del ctrl
+
+print(total_iterations)
