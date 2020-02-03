@@ -243,23 +243,8 @@ class BPTT_Controller():
         eta = tf.reshape(eta, [self.batch_size, 3, 1])
         eta = (self.train_dt)*eta_dot + eta  # integral
 
-        print(eta[:,2])
-        eta_ajust = tf.cond((tf.abs(eta[:, 2])> np.pi), lambda: tf.multiply((eta[:,2]/tf.abs(eta[:,2])),(tf.abs(eta[:,2])-2*np.pi)), lambda: eta[:,2])
-        #print(lol)
-        values = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi))#, (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
-        #eta[:, 2] = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi), (eta[:,2]/tf.abs(eta[:,2]))*(tf.abs(eta[:.2])-2*np.pi) , eta[:,2])
+        # eta[:, 2] = tf.where(tf.greater(tf.abs(eta[:, 2]), np.pi))
         #    eta[2] = (self.eta[2]/abs(self.eta[2]))*(abs(self.eta[2])-2*np.pi)
-        #a_list = tf.unstack(eta)
-        #print(a_list)
-        #a_list[:,2]=lol
-        indices = [[tf.range(10),2]]  # A list of coordinates to update.
-
-        shape = [10, 3]  # The shape of the corresponding dense tensor, same as `c`.
-
-        delta = tf.SparseTensor(indices, values, shape)
-
-        result = eta + tf.sparse_tensor_to_dense(delta)
-        #https://stackoverflow.com/questions/34685947/adjust-single-value-within-tensor-tensorflow
 
         eta = tf.reshape(eta, [self.batch_size, 3])
         upsilon = tf.reshape(upsilon, [self.batch_size, 3])
@@ -428,7 +413,7 @@ class BPTT_Controller():
         '''
         state = self.boat.state.copy()
         print(state)
-        state[0:3] -= (target - self.train_target)
+        state[0:2] -= (target - self.train_target)
         action = self.run_numpy_action_network(state)
         rotor_speeds = to_rotor_speeds(self.boat.physics.hover_rotor_speed, *action)
         return rotor_speeds
@@ -438,6 +423,9 @@ class BPTT_Controller():
         between simulations (e.g. initial error and integral in a PID controller)
         It is not necessary to implement for a trained neural network'''
         pass
+
+    def __del__(self):
+       print("Destructor called")
 
 
 '''To train'''
@@ -453,14 +441,20 @@ yaw_ang_vel_lim = [-0.0, 0.0]
 # Lists of parameters
 eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
-# Create objects
-boat = Boat(random_eta_limits=eta_limits,
-            random_upsilon_limits=upsilon_limits)
-<<<<<<< HEAD
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[8, 8],
-                       graph_timesteps=500, train_dt=0.01, train_iterations=500)
-=======
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64],
-                       graph_timesteps=400, train_dt=0.02, train_iterations=2000, model_name='example')
->>>>>>> d5eda9dd8986e37e31962a4aca0ce2d5189eb278
-ctrl.save_model('example')
+#Loop for shuffling initial parameters
+total_iterations=50000
+train_iterations= 2000
+cycles = total_iterations/train_iterations
+for k in range(int(cycles)):
+    n=(k)*train_iterations+32000
+    if k==0:
+        model_name='example32000'
+    else: 
+        model_name='example'+ str(n)
+    # Create objects
+    boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
+    ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=400, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
+    ctrl.save_model('example'+ str(n+train_iterations))
+    del ctrl
+
+print(total_iterations)
