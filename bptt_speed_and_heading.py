@@ -56,7 +56,7 @@ class BPTT_Controller():
             self.build_graph(graph_timesteps)
             if model_name is not None:
                 self.restore_model(model_name)
-            self.train(self.random_state, train_iterations)
+            self.train(train_iterations)
             self.to_numpy_model()
         else:
             self.reset_random()
@@ -98,6 +98,12 @@ class BPTT_Controller():
         for i in range(self.batch_size):
             self.boat.reset_random()
             state = self.boat.state.copy()
+            if self.train_target[1] > 1.4:
+                state[2] = state[2]*0.1
+            elif self.train_target[1] > 1.2:
+                state[2] = state[2]*0.25
+            elif self.train_target[1] > 0.7:
+                state[2] = state[2]*0.5
             e_u = self.train_target[1] - state[3]
             state = np.append(state, e_u)
             state = np.append(state, 0)
@@ -105,7 +111,6 @@ class BPTT_Controller():
             '''for j in range(3):
                 state[j] *= 2.'''
             random_state.append(state[2:9])
-        #print(random_state)
         return np.array(random_state)
 
     def reset_random(self):
@@ -162,17 +167,22 @@ class BPTT_Controller():
         '''
         ku = 3
         kpsi = 5.72
-        kt = 0.25
+        kt = 0.8
 
         heading = state[:,0]
         e_u = tf.math.abs(state[:,4])
+        e_u = tf.reshape(e_u, [self.batch_size, 1])
         e_psi = tf.math.abs(self.train_target[0] - heading)
-        reward = tf.math.exp(-ku*e_u)
+        e_psi = tf.reshape(e_psi, [self.batch_size, 1])
+        port = tf.reshape(port, [self.batch_size, 1])
+        stbd = tf.reshape(stbd, [self.batch_size, 1])
+        reward = 0.5 * tf.math.exp(-ku*e_u)
+        #print(port)
         reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), -tf.math.exp(kpsi*(e_psi-np.pi)))
         reward += reward_psi
-        reward += 0.5*tf.math.exp(-kt*port)
-        reward += 0.5*tf.math.exp(-kt*stbd)
-        return reward, e_u, e_psi
+        reward += 0.1 * tf.where(tf.less(port, 10), tf.math.exp(-kt*port), tf.tanh(-tf.math.exp(kt*(port-17.5))))
+        reward += 0.1 * tf.where(tf.less(stbd, 10), tf.math.exp(-kt*stbd), tf.tanh(-tf.math.exp(kt*(stbd-17.5))))
+        return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd):
         '''Calculate the next state of the quadcopter after one timestep
@@ -189,6 +199,8 @@ class BPTT_Controller():
         upsilon = state[:, 1:4]
         Tport = action[:, 0]
         Tstbd = action[:, 1]
+        past_port = state[:, 5]
+        past_stbd = state[:, 6]
 
         zeros = tf.zeros([self.batch_size], dtype=tf.float32)
         ones = tf.ones([self.batch_size], dtype=tf.float32)
@@ -265,17 +277,20 @@ class BPTT_Controller():
         stbd_vector = stbd[:, 1:20]
         stbd_vector = tf.reshape(stbd_vector, [self.batch_size, 19])
 
+        past_port = tf.reshape(past_port, [self.batch_size, 1])
         Tport = tf.reshape(Tport, [self.batch_size, 1])
 
+        past_stbd = tf.reshape(past_stbd, [self.batch_size, 1])
         Tstbd = tf.reshape(Tstbd, [self.batch_size, 1])
 
-        std_port = tf.concat([port_vector, Tport],1)
+        std_port = tf.concat([port_vector, past_port],1)
         std_port = tf.reshape(std_port, [self.batch_size, 20])
 
         sigma_port = tf.math.reduce_std(std_port,1)
         sigma_port = tf.reshape(sigma_port, [self.batch_size, 1])
 
-        std_stbd = tf.concat([stbd_vector, Tstbd],1)
+
+        std_stbd = tf.concat([stbd_vector, past_stbd],1)
         std_stbd = tf.reshape(std_stbd, [self.batch_size, 20])
 
         sigma_stbd = tf.math.reduce_std(std_stbd,1)
@@ -285,9 +300,8 @@ class BPTT_Controller():
         upsilon = tf.reshape(upsilon, [self.batch_size, 3])
         eu = tf.reshape(eu, [self.batch_size, 1])
         next_state = tf.concat([eta, upsilon, eu, Tport, Tstbd], axis=1)
-        #print(next_state)
-        reward, e_u, e_psi = self.get_reward(next_state, sigma_port, sigma_stbd)
-        return next_state, reward, e_u, e_psi, std_port, std_stbd
+        reward, e_psi = self.get_reward(next_state, sigma_port, sigma_stbd)
+        return next_state, reward, e_psi, std_port, std_stbd, sigma_port, sigma_stbd
 
     def build_graph(self, graph_timesteps):
         '''Build a tensorflow graph to train using an optimizer
@@ -306,36 +320,41 @@ class BPTT_Controller():
             tf.float32, shape=[self.batch_size, self.action_network_num_inputs])
         state = self.ph_initial_state
 
-        port = tf.zeros([self.batch_size, 20], dtype=tf.float32)
-        stbd = tf.zeros([self.batch_size, 20], dtype=tf.float32)
+        self.ph_initial_thrusts = tf.placeholder(tf.float32, shape=[self.batch_size, 20])
+
+        port = self.ph_initial_thrusts
+        stbd = self.ph_initial_thrusts
 
         # Unrolled trajectory graph
         actions = []
         rewards = []
         trajectory = [state]
-        speed_errors = []
         heading_errors = []
-        ports = []
-        stbds = []
+        ports = [port]
+        stbds = [stbd]
+        sigma_ports = []
+        sigma_stbds = []
         for t in range(self.graph_timesteps):
             action = self.run_action_network(state)
-            state, reward, e_u, e_psi, port, stbd = self.next_timestep(state, action, port, stbd)
+            state, reward, e_psi, port, stbd, sigma_p, sigma_s = self.next_timestep(state, action, port, stbd)
             total_reward += (self.discount_factor ** t) * reward
             actions.append(action)
             rewards.append(reward)
             trajectory.append(state)
-            speed_errors.append(e_u)
             heading_errors.append(e_psi)
             ports.append(port)
             stbds.append(stbd)
+            sigma_ports.append(sigma_p)
+            sigma_stbds.append(sigma_s)
 
         self.actions = tf.stack(actions)
         self.rewards = tf.stack(rewards)
         self.trajectory = tf.stack(trajectory)
-        self.e_u = tf.stack(speed_errors)
         self.e_psi = tf.stack(heading_errors)
         self.ports = tf.stack(ports)
         self.stbds = tf.stack(stbds)
+        self.sigma_ports = tf.stack(sigma_ports)
+        self.sigma_stbds = tf.stack(sigma_stbds)
 
         # Initialize optimizer
         self.average_total_reward = tf.reduce_mean(total_reward)
@@ -343,7 +362,7 @@ class BPTT_Controller():
         self.update = optimizer.minimize(-self.average_total_reward)
         self.sess.run(tf.global_variables_initializer())
 
-    def train(self, initial_state, train_iterations):
+    def train(self, train_iterations):
         '''Train the neural network
         Size of tensors' first dimension is the batch size for parallel computation
         Params
@@ -355,11 +374,11 @@ class BPTT_Controller():
         if self.graphical:
             plt.close()
             fig = plt.figure('Trajectory')
-            ylabels = ['psi', 'u', 'v', 'r', 'e_psi', 'e_u',
+            ylabels = ['psi', 'u', 'v', 'r', 'e_u', 'e_psi', 'sigma_port', 'sigma_stbd',
                        'Tport', 'Tstbd', 'avg. total reward']
             axes = []
-            for i in range(9):
-                ax = fig.add_subplot(3, 3, i + 1)
+            for i in range(11):
+                ax = fig.add_subplot(4, 3, i + 1)
                 ax.xaxis.set_label_coords(1.05, -0.025)
                 plt.xlabel('time')
                 plt.ylabel(ylabels[i])
@@ -368,45 +387,59 @@ class BPTT_Controller():
                 axes.append(ax)
             plt.xlabel('iterations')
 
+        initial_thrusts = np.zeros([self.batch_size,20])
+
         # Train
         iterations = []
         average_total_rewards = []
         for i in range(train_iterations + 1):
-            print("iteration: ", i)
+            
             # Get results
-            actions, rewards, trajectory, speed_error, heading_error, average_total_reward = self.sess.run(
-                [self.actions, self.rewards, self.trajectory, self.e_u, self.e_psi, self.average_total_reward],
-                feed_dict={self.ph_initial_state: initial_state})
+            actions, rewards, trajectory, heading_error, sigma_port, sigma_stbd, average_total_reward = self.sess.run(
+                [self.actions, self.rewards, self.trajectory, self.e_psi, self.sigma_ports, self.sigma_stbds, self.average_total_reward],
+                feed_dict={self.ph_initial_state: self.random_state, self.ph_initial_thrusts: initial_thrusts})
 
             # Update weight variables
             if i != train_iterations:
-                self.sess.run(self.update, feed_dict={self.ph_initial_state: initial_state})
+                self.sess.run(self.update, feed_dict={self.ph_initial_state: self.random_state, self.ph_initial_thrusts: initial_thrusts})
 
             # Plot results
             iterations.append(i)
             average_total_rewards.append(average_total_reward)
+            print("iteration: ", i, 'Average total reward:', average_total_reward)
             if i % 100 == 0:
                 print('iteration:', i, 'Average total reward:', average_total_reward)
+                print("train target: ", self.train_target[1])
                 if self.graphical:
                     for traj in range(self.batch_size):
                         time = np.arange(self.graph_timesteps + 1) * self.train_dt
-                        for j in range(4):
+                        for j in range(5):
                             del axes[j].lines[0]
                             axes[j].plot(time, trajectory[:, traj, j], 'b-')
                             axes[j].relim()
-                        del axes[4].lines[0]
-                        axes[4].plot(time[:-1], heading_error[:, traj], 'b-')
-                        axes[4].relim()
                         del axes[5].lines[0]
-                        axes[5].plot(time[:-1], speed_error[:, traj], 'b-')
+                        axes[5].plot(time[:-1], heading_error[:, traj], 'b-')
                         axes[5].relim()
+                        del axes[6].lines[0]
+                        axes[6].plot(time[:-1], sigma_port[:, traj], 'b-')
+                        axes[6].relim()
+                        del axes[7].lines[0]
+                        axes[7].plot(time[:-1], sigma_stbd[:, traj], 'b-')
+                        axes[7].relim()
                         for j in range(2):
-                            del axes[j+6].lines[0]
-                            axes[j+6].plot(time[:-1], actions[:, traj, j], 'b-')
-                            axes[j+6].relim()
-                    del axes[8].lines[0]
-                    axes[8].plot(iterations, average_total_rewards, 'b-')
+                            del axes[j+8].lines[0]
+                            axes[j+8].plot(time[:-1], actions[:, traj, j], 'b-')
+                            axes[j+8].relim()
+                    del axes[10].lines[0]
+                    axes[10].plot(iterations, average_total_rewards, 'b-')
                     plt.pause(1e-10)
+                
+
+            '''if (i > 1 and i % 500 == 0):
+                self.train_target = self.get_train_target()
+                self.random_state = self.get_random_state()
+                self.save_model('example'+ str(i)) #find a way to  '''
+
 
     def save_model(self, model_name):
         '''Save weight variables
@@ -414,7 +447,7 @@ class BPTT_Controller():
         ======
             model_name: string, name of the model to save
         '''
-        self.saver.save(self.sess, './models_sh/' + model_name,
+        self.saver.save(self.sess, './models/' + model_name,
                         write_meta_graph=False, write_state=False)
 
     def restore_model(self, model_name):
@@ -423,7 +456,7 @@ class BPTT_Controller():
         ======
             model_name: string, name of the model to restore
         '''
-        self.saver.restore(self.sess, './models_sh/' + model_name)
+        self.saver.restore(self.sess, './models/' + model_name)
 
     def to_numpy_model(self):
         '''Convert tensorflow weight variables into numpy weight variables'''
@@ -475,8 +508,8 @@ class BPTT_Controller():
 '''To train'''
 
 # Eta limits
-xlim = [-2.5, 2.5]
-ylim = [-2.5, 2.5]
+xlim = [-0, 0]
+ylim = [-0, 0]
 yawlim = [-np.pi, np.pi]
 # Random upsilon limits
 xvel_lim = [0.0, 1.5]
@@ -486,7 +519,7 @@ yaw_ang_vel_lim = [-0.0, 0.0]
 eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
 # Create objects
-total_iterations=25000
+total_iterations=50000
 train_iterations= 1000
 cycles = total_iterations/train_iterations
 for k in range(int(cycles)):
@@ -497,7 +530,7 @@ for k in range(int(cycles)):
         model_name='example'+ str(n)
     # Create objects
     boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
-    ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=100, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
+    ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=250, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
     ctrl.save_model('example'+ str(n+train_iterations))
     del ctrl
 
