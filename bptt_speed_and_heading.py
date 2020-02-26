@@ -102,7 +102,6 @@ class BPTT_Controller():
                 state[2] = state[2]*0.1
             elif self.train_target[1] > 0.7:
                 state[2] = state[2]*0.5
-            state[3] = 0
             e_u = self.train_target[1] - state[3]
             state = np.append(state, e_u)
             state = np.append(state, 0)
@@ -173,13 +172,14 @@ class BPTT_Controller():
         e_u = tf.reshape(e_u, [self.batch_size, 1])
         e_psi = tf.math.abs(self.train_target[0] - heading)
         e_psi = tf.reshape(e_psi, [self.batch_size, 1])
-        port = tf.reshape(port, [self.batch_size, 1])
-        stbd = tf.reshape(stbd, [self.batch_size, 1])
+        #port = tf.reshape(port, [self.batch_size, 1])
+        #stbd = tf.reshape(stbd, [self.batch_size, 1])
         reward = 0.3 * tf.math.exp(-ku*e_u)
-        reward_psi = 0.5 * tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
-        reward += reward_psi
-        reward += 0.1 * tf.tanh(-tf.math.exp(kt*(port-6)))#tf.where(tf.less(port, 3.5), tf.math.exp(-kt*port), tf.tanh(-tf.math.exp(kt*(port-6))))
-        reward += 0.1 * tf.tanh(-tf.math.exp(kt*(stbd-6)))#tf.where(tf.less(stbd, 3.5), tf.math.exp(-kt*stbd), tf.tanh(-tf.math.exp(kt*(stbd-6))))
+        reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
+        reward += 0.5 * reward_psi
+        #reward += 0.1 * tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
+        #reward += 0.1 * tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
+        reward = tf.where(tf.is_nan(reward), -tf.ones([self.batch_size, 1], dtype=tf.float32), reward)
         return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd, last):
@@ -276,7 +276,7 @@ class BPTT_Controller():
 
         eta = (self.train_dt) * (eta_dot + eta_dot_last)/2 + eta  # integral
 
-        eta = tf.where(tf.greater(tf.abs(eta), np.pi), (eta/tf.math.abs(eta))*(tf.math.abs(eta)-2*np.pi), eta)
+        eta = tf.where(tf.greater(tf.abs(eta), np.pi), (tf.math.sign(eta))*(tf.math.abs(eta)-2*np.pi), eta)
 
         eu = self.train_target[1] - upsilon[:, 0]
 
@@ -423,7 +423,7 @@ class BPTT_Controller():
             iterations.append(i)
             average_total_rewards.append(average_total_reward)
             print("iteration: ", i, 'Average total reward:', average_total_reward)
-            if i % 100 == 0:
+            if i % 50 == 0:
                 print('iteration:', i, 'Average total reward:', average_total_reward)
                 print("train target: ", self.train_target[1])
                 if self.graphical:
@@ -539,9 +539,9 @@ total_iterations=50000
 train_iterations= 500
 cycles = total_iterations/train_iterations
 for k in range(int(cycles)):
-    n=(k)*train_iterations+2500
+    n=(k)*train_iterations
     if k==0:
-        model_name='example'+ str(2500)
+        model_name= None#'example'+ str(2500)
     else: 
         model_name='example'+ str(n)
     # Create objects
