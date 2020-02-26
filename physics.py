@@ -80,7 +80,7 @@ class Physics():
         ======
             bool, end condition reached
         '''
-        Xu = -0.25
+        Xu = -25
         Xuu = 0
         if(abs(self.upsilon[0]) > 1.2):
             Xu = 64.55
