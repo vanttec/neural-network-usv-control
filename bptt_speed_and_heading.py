@@ -172,14 +172,13 @@ class BPTT_Controller():
         e_u = tf.reshape(e_u, [self.batch_size, 1])
         e_psi = tf.math.abs(self.train_target[0] - heading)
         e_psi = tf.reshape(e_psi, [self.batch_size, 1])
-        #port = tf.reshape(port, [self.batch_size, 1])
-        #stbd = tf.reshape(stbd, [self.batch_size, 1])
-        reward = 0.3 * tf.math.exp(-ku*e_u)
+        port = tf.reshape(port, [self.batch_size, 1])
+        stbd = tf.reshape(stbd, [self.batch_size, 1])
+        reward = 0.35 * tf.math.exp(-ku*e_u)
         reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
-        reward += 0.5 * reward_psi
-        #reward += 0.1 * tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
-        #reward += 0.1 * tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
-        reward = tf.where(tf.is_nan(reward), -tf.ones([self.batch_size, 1], dtype=tf.float32), reward)
+        reward += 0.45 * reward_psi
+        reward += 0.1 * tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
+        reward += 0.1 * tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
         return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd, last):
@@ -197,8 +196,8 @@ class BPTT_Controller():
         upsilon = state[:, 1:4]
         Tport = action[:, 0]
         Tstbd = action[:, 1]
-        past_port = state[:, 5]
-        past_stbd = state[:, 6]
+        #past_port = state[:, 5]
+        #past_stbd = state[:, 6]
         eta_dot_last = last[:, 0]
         upsilon_dot_last = last[:,1:4]
         eta_dot_last = tf.reshape(eta_dot_last, [self.batch_size, 1])
@@ -247,7 +246,7 @@ class BPTT_Controller():
                        [zeros, -Nv, -Nr]])
         Dl = tf.transpose(Dl, perm=[2, 0, 1])
 
-        Dn = tf.stack([[Xuu * abs(upsilon[:, 0]), zeros, zeros],
+        Dn = tf.stack([[Xuu * tf.abs(upsilon[:, 0]), zeros, zeros],
                        [zeros, self.boat.physics.Yvv * tf.abs(upsilon[:, 1]) + self.boat.physics.Yvr * tf.abs(upsilon[:, 2]), self.boat.physics.Yrv *
                            tf.abs(upsilon[:, 1]) + self.boat.physics.Yrr * tf.abs(upsilon[:, 2])],
                        [zeros, self.boat.physics.Nvv * tf.abs(upsilon[:, 1]) + self.boat.physics.Nvr * tf.abs(upsilon[:, 2]), self.boat.physics.Nrv * tf.abs(upsilon[:, 1]) + self.boat.physics.Nrr * tf.abs(upsilon[:, 2])]])
@@ -280,26 +279,26 @@ class BPTT_Controller():
 
         eu = self.train_target[1] - upsilon[:, 0]
 
-        port_vector = port[:, 1:10]
-        port_vector = tf.reshape(port_vector, [self.batch_size, 9])
+        port_vector = port[:, 1:20]
+        port_vector = tf.reshape(port_vector, [self.batch_size, 19])
 
-        stbd_vector = stbd[:, 1:10]
-        stbd_vector = tf.reshape(stbd_vector, [self.batch_size, 9])
+        stbd_vector = stbd[:, 1:20]
+        stbd_vector = tf.reshape(stbd_vector, [self.batch_size, 19])
 
-        past_port = tf.reshape(past_port, [self.batch_size, 1])
+        #past_port = tf.reshape(past_port, [self.batch_size, 1])
         Tport = tf.reshape(Tport, [self.batch_size, 1])
 
-        past_stbd = tf.reshape(past_stbd, [self.batch_size, 1])
+        #past_stbd = tf.reshape(past_stbd, [self.batch_size, 1])
         Tstbd = tf.reshape(Tstbd, [self.batch_size, 1])
 
-        std_port = tf.concat([port_vector, past_port],1)
-        std_port = tf.reshape(std_port, [self.batch_size, 10])
+        std_port = tf.concat([port_vector, Tport],1)
+        std_port = tf.reshape(std_port, [self.batch_size, 20])
 
         sigma_port = tf.math.reduce_std(std_port,1)
         sigma_port = tf.reshape(sigma_port, [self.batch_size, 1])
 
-        std_stbd = tf.concat([stbd_vector, past_stbd],1)
-        std_stbd = tf.reshape(std_stbd, [self.batch_size, 10])
+        std_stbd = tf.concat([stbd_vector, Tstbd],1)
+        std_stbd = tf.reshape(std_stbd, [self.batch_size, 20])
 
         sigma_stbd = tf.math.reduce_std(std_stbd,1)
         sigma_stbd = tf.reshape(sigma_stbd, [self.batch_size, 1])
@@ -330,7 +329,7 @@ class BPTT_Controller():
             tf.float32, shape=[self.batch_size, self.action_network_num_inputs])
         state = self.ph_initial_state
 
-        self.ph_initial_thrusts = tf.placeholder(tf.float32, shape=[self.batch_size, 10])
+        self.ph_initial_thrusts = tf.placeholder(tf.float32, shape=[self.batch_size, 20])
         port = self.ph_initial_thrusts
         stbd = self.ph_initial_thrusts
 
@@ -346,7 +345,7 @@ class BPTT_Controller():
         stbds = [stbd]
         sigma_ports = []
         sigma_stbds = []
-        lasts = []
+        lasts = [last]
         for t in range(self.graph_timesteps):
             action = self.run_action_network(state)
             state, reward, e_psi, port, stbd, sigma_p, sigma_s, last = self.next_timestep(state, action, port, stbd, last)
@@ -373,7 +372,7 @@ class BPTT_Controller():
 
         # Initialize optimizer
         self.average_total_reward = tf.reduce_mean(total_reward)
-        optimizer = tf.train.AdamOptimizer()
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
         self.update = optimizer.minimize(-self.average_total_reward)
         self.sess.run(tf.global_variables_initializer())
 
@@ -402,7 +401,7 @@ class BPTT_Controller():
                 axes.append(ax)
             plt.xlabel('iterations')
 
-        initial_thrusts = np.zeros([self.batch_size, 10])
+        initial_thrusts = np.zeros([self.batch_size, 20])
         initial_lasts = np.zeros([self.batch_size, 4])
 
         # Train
