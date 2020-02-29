@@ -165,7 +165,7 @@ class BPTT_Controller():
         '''
         ku = 3
         kpsi = 5.72
-        kt = 3
+        kt = 1/.3
 
         heading = state[:,0]
         e_u = tf.math.abs(state[:,4])
@@ -177,8 +177,8 @@ class BPTT_Controller():
         reward = 0.35 * tf.math.exp(-ku*e_u)
         reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
         reward += 0.45 * reward_psi
-        reward += 0.1 * tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
-        reward += 0.1 * tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
+        reward += 0.1 * tf.math.exp(-kt*port) #tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
+        reward += 0.1 * tf.math.exp(-kt*stbd) #tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
         return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd, last):
@@ -285,19 +285,19 @@ class BPTT_Controller():
         stbd_vector = stbd[:, 1:20]
         stbd_vector = tf.reshape(stbd_vector, [self.batch_size, 19])
 
-        #past_port = tf.reshape(past_port, [self.batch_size, 1])
         Tport = tf.reshape(Tport, [self.batch_size, 1])
+        scaled_port = Tport/35
 
-        #past_stbd = tf.reshape(past_stbd, [self.batch_size, 1])
         Tstbd = tf.reshape(Tstbd, [self.batch_size, 1])
+        scaled_stbd = Tstbd/35
 
-        std_port = tf.concat([port_vector, Tport],1)
+        std_port = tf.concat([port_vector, scaled_port],1)
         std_port = tf.reshape(std_port, [self.batch_size, 20])
 
         sigma_port = tf.math.reduce_std(std_port,1)
         sigma_port = tf.reshape(sigma_port, [self.batch_size, 1])
 
-        std_stbd = tf.concat([stbd_vector, Tstbd],1)
+        std_stbd = tf.concat([stbd_vector, scaled_stbd],1)
         std_stbd = tf.reshape(std_stbd, [self.batch_size, 20])
 
         sigma_stbd = tf.math.reduce_std(std_stbd,1)
@@ -535,12 +535,12 @@ eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
 # Create objects
 total_iterations=50000
-train_iterations= 500
+train_iterations= 1000
 cycles = total_iterations/train_iterations
 for k in range(int(cycles)):
-    n=(k)*train_iterations+8000
+    n=(k)*train_iterations
     if k==0:
-        model_name= 'example'+ str(8000)
+        model_name= None#'example'+ str(8000)
     else: 
         model_name='example'+ str(n)
     # Create objects
