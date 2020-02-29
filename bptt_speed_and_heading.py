@@ -538,9 +538,9 @@ total_iterations=50000
 train_iterations= 500
 cycles = total_iterations/train_iterations
 for k in range(int(cycles)):
-    n=(k)*train_iterations
+    n=(k)*train_iterations+8000
     if k==0:
-        model_name= None#'example'+ str(2500)
+        model_name= 'example'+ str(8000)
     else: 
         model_name='example'+ str(n)
     # Create objects
