@@ -20,11 +20,11 @@ def weight_variable(shape):
 
 class TfToNp():
 
-	def __init__(self, boat, num_hidden_units=[64, 64], model_name=None):
+	def __init__(self, num_hidden_units=[64, 64], model_name=None):
 
-		self.boat = boat
+		#self.boat = boat
 
-		self.action_network_num_inputs = self.boat.state.size
+		self.action_network_num_inputs = 7
 		self.action_network_num_outputs = 2
 		self.num_hidden_units = num_hidden_units
 

@@ -77,10 +77,13 @@ class BPTT_Controller():
         ======
             1D numpy array: train target
         '''
-        self.boat.reset_random()
-        state = self.boat.state.copy()
-        train_target = [0,state[3]]
-        return np.array(train_target)
+        random_target = []
+        for i in range(self.batch_size):
+            self.boat.reset_random()
+            state = self.boat.state.copy()
+            train_target = [0,state[3]]
+            random_target.append(train_target)
+        return np.array(random_target)
 
     def get_random_state(self):
         '''Use the random state generator from the
@@ -98,11 +101,11 @@ class BPTT_Controller():
         for i in range(self.batch_size):
             self.boat.reset_random()
             state = self.boat.state.copy()
-            if self.train_target[1] > 1.2:
+            if self.train_target[i][1] > 1.2:
                 state[2] = state[2]*0.1
-            elif self.train_target[1] > 0.7:
+            elif self.train_target[i][1] > 0.7:
                 state[2] = state[2]*0.5
-            e_u = self.train_target[1] - state[3]
+            e_u = self.train_target[i][1] - state[3]
             state = np.append(state, e_u)
             state = np.append(state, 0)
             state = np.append(state, 0)
@@ -170,7 +173,7 @@ class BPTT_Controller():
         heading = state[:,0]
         e_u = tf.math.abs(state[:,4])
         e_u = tf.reshape(e_u, [self.batch_size, 1])
-        e_psi = tf.math.abs(self.train_target[0] - heading)
+        e_psi = tf.math.abs(self.train_target[:,0] - heading)
         e_psi = tf.reshape(e_psi, [self.batch_size, 1])
         port = tf.reshape(port, [self.batch_size, 1])
         stbd = tf.reshape(stbd, [self.batch_size, 1])
@@ -277,7 +280,7 @@ class BPTT_Controller():
 
         eta = tf.where(tf.greater(tf.abs(eta), np.pi), (tf.math.sign(eta))*(tf.math.abs(eta)-2*np.pi), eta)
 
-        eu = self.train_target[1] - upsilon[:, 0]
+        eu = self.train_target[:, 1] - upsilon[:, 0]
 
         port_vector = port[:, 1:20]
         port_vector = tf.reshape(port_vector, [self.batch_size, 19])
@@ -424,7 +427,7 @@ class BPTT_Controller():
             print("iteration: ", i, 'Average total reward:', average_total_reward)
             if i % 50 == 0:
                 print('iteration:', i, 'Average total reward:', average_total_reward)
-                print("train target: ", self.train_target[1])
+                print("train target: ", self.train_target[:,1])
                 if self.graphical:
                     for traj in range(self.batch_size):
                         time = np.arange(self.graph_timesteps + 1) * self.train_dt
@@ -450,10 +453,10 @@ class BPTT_Controller():
                     plt.pause(1e-10)
                 
 
-            '''if (i > 1 and i % 500 == 0):
-                self.train_target = self.get_train_target()
+            if (i > 1 and i % 1000 == 0):
+                #self.train_target = self.get_train_target()
                 self.random_state = self.get_random_state()
-                self.save_model('example'+ str(i)) #find a way to  '''
+                self.save_model('example'+ str(i)) #find a way to  
 
 
     def save_model(self, model_name):
@@ -534,19 +537,19 @@ yaw_ang_vel_lim = [-0.0, 0.0]
 eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
 # Create objects
-total_iterations=50000
-train_iterations= 1000
-cycles = total_iterations/train_iterations
-for k in range(int(cycles)):
-    n=(k)*train_iterations
-    if k==0:
-        model_name= None#'example'+ str(8000)
-    else: 
-        model_name='example'+ str(n)
+#total_iterations=50000
+train_iterations= 50000
+#cycles = total_iterations/train_iterations
+#for k in range(int(cycles)):
+#    n=(k)*train_iterations
+#    if k==0:
+model_name= None#'example'+ str(8000)
+#    else: 
+#        model_name='example'+ str(n)
     # Create objects
-    boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
-    ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=250, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
-    ctrl.save_model('example'+ str(n+train_iterations))
-    del ctrl
+boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
+ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=250, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
+ctrl.save_model('example'+ str(train_iterations))
+#    del ctrl
 
 print(total_iterations)
