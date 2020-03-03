@@ -179,9 +179,9 @@ class BPTT_Controller():
         stbd = tf.reshape(stbd, [self.batch_size, 1])
         reward = 0.35 * tf.math.exp(-ku*e_u)
         reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
-        reward += 0.45 * reward_psi
-        reward += 0.1 * tf.math.exp(-kt*port) #tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
-        reward += 0.1 * tf.math.exp(-kt*stbd) #tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
+        reward += 0.35 * reward_psi
+        reward += 0.15 * tf.math.exp(-kt*port) #tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
+        reward += 0.15 * tf.math.exp(-kt*stbd) #tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
         return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd, last):
@@ -543,12 +543,12 @@ train_iterations= 50000
 #for k in range(int(cycles)):
 #    n=(k)*train_iterations
 #    if k==0:
-model_name= None#'example'+ str(8000)
+model_name= None#'example'+ str(3000)
 #    else: 
 #        model_name='example'+ str(n)
     # Create objects
 boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=250, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
+ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=300, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
 ctrl.save_model('example'+ str(train_iterations))
 #    del ctrl
 
