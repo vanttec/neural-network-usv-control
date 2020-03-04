@@ -180,8 +180,8 @@ class BPTT_Controller():
         reward = 0.35 * tf.math.exp(-ku*e_u)
         reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
         reward += 0.35 * reward_psi
-        reward += 0.15 * tf.math.exp(-kt*port) #tf.where(tf.less(port, 3.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-6))))
-        reward += 0.15 * tf.math.exp(-kt*stbd) #tf.where(tf.less(stbd, 3.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-6))))
+        reward += 0.15 * tf.math.exp(-kt*port)#tf.where(tf.less(port, 0.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-1))))
+        reward += 0.15 * tf.math.exp(-kt*stbd)#tf.where(tf.less(stbd, 0.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-1))))
         return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd, last):
@@ -375,7 +375,7 @@ class BPTT_Controller():
 
         # Initialize optimizer
         self.average_total_reward = tf.reduce_mean(total_reward)
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005, epsilon=1)
         self.update = optimizer.minimize(-self.average_total_reward)
         self.sess.run(tf.global_variables_initializer())
 
@@ -456,6 +456,7 @@ class BPTT_Controller():
             if (i > 1 and i % 1000 == 0):
                 #self.train_target = self.get_train_target()
                 self.random_state = self.get_random_state()
+                initial_state = self.random_state
                 self.save_model('example'+ str(i)) #find a way to  
 
 
@@ -543,12 +544,12 @@ train_iterations= 50000
 #for k in range(int(cycles)):
 #    n=(k)*train_iterations
 #    if k==0:
-model_name= None#'example'+ str(3000)
+model_name= None#'example'+ str(9000)
 #    else: 
 #        model_name='example'+ str(n)
     # Create objects
 boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=300, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
+ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=250, train_dt=0.02, train_iterations=train_iterations, model_name=model_name)
 ctrl.save_model('example'+ str(train_iterations))
 #    del ctrl
 
