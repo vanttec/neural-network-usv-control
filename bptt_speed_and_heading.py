@@ -105,6 +105,7 @@ class BPTT_Controller():
                 state[2] = state[2]*0.1
             elif self.train_target[i][1] > 0.7:
                 state[2] = state[2]*0.5
+            state[3] = 0
             e_u = self.train_target[i][1] - state[3]
             state = np.append(state, e_u)
             state = np.append(state, 0)
@@ -177,11 +178,11 @@ class BPTT_Controller():
         e_psi = tf.reshape(e_psi, [self.batch_size, 1])
         port = tf.reshape(port, [self.batch_size, 1])
         stbd = tf.reshape(stbd, [self.batch_size, 1])
-        reward = 0.35 * tf.math.exp(-ku*e_u)
+        reward = 0.15 * tf.math.exp(-ku*e_u)
         reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-kpsi*e_psi), tf.tanh(-tf.math.exp(kpsi*(e_psi-np.pi))))
-        reward += 0.35 * reward_psi
-        reward += 0.15 * tf.math.exp(-kt*port)#tf.where(tf.less(port, 0.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-1))))
-        reward += 0.15 * tf.math.exp(-kt*stbd)#tf.where(tf.less(stbd, 0.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-1))))
+        reward += 0.15 * reward_psi
+        reward += 0.35 * tf.math.exp(-kt*port)#tf.where(tf.less(port, 0.5), tf.tanh(tf.math.exp(-kt*port)), tf.tanh(-tf.math.exp(kt*(port-1))))
+        reward += 0.35 * tf.math.exp(-kt*stbd)#tf.where(tf.less(stbd, 0.5), tf.tanh(tf.math.exp(-kt*stbd)), tf.tanh(-tf.math.exp(kt*(stbd-1))))
         return reward, e_psi
 
     def next_timestep(self, state, action, port, stbd, last):
@@ -282,11 +283,11 @@ class BPTT_Controller():
 
         eu = self.train_target[:, 1] - upsilon[:, 0]
 
-        port_vector = port[:, 1:20]
-        port_vector = tf.reshape(port_vector, [self.batch_size, 19])
+        port_vector = port[:, 1:10]
+        port_vector = tf.reshape(port_vector, [self.batch_size, 9])
 
-        stbd_vector = stbd[:, 1:20]
-        stbd_vector = tf.reshape(stbd_vector, [self.batch_size, 19])
+        stbd_vector = stbd[:, 1:10]
+        stbd_vector = tf.reshape(stbd_vector, [self.batch_size, 9])
 
         Tport = tf.reshape(Tport, [self.batch_size, 1])
         scaled_port = Tport/35
@@ -295,13 +296,13 @@ class BPTT_Controller():
         scaled_stbd = Tstbd/35
 
         std_port = tf.concat([port_vector, scaled_port],1)
-        std_port = tf.reshape(std_port, [self.batch_size, 20])
+        std_port = tf.reshape(std_port, [self.batch_size, 10])
 
         sigma_port = tf.math.reduce_std(std_port,1)
         sigma_port = tf.reshape(sigma_port, [self.batch_size, 1])
 
         std_stbd = tf.concat([stbd_vector, scaled_stbd],1)
-        std_stbd = tf.reshape(std_stbd, [self.batch_size, 20])
+        std_stbd = tf.reshape(std_stbd, [self.batch_size, 10])
 
         sigma_stbd = tf.math.reduce_std(std_stbd,1)
         sigma_stbd = tf.reshape(sigma_stbd, [self.batch_size, 1])
@@ -332,7 +333,7 @@ class BPTT_Controller():
             tf.float32, shape=[self.batch_size, self.action_network_num_inputs])
         state = self.ph_initial_state
 
-        self.ph_initial_thrusts = tf.placeholder(tf.float32, shape=[self.batch_size, 20])
+        self.ph_initial_thrusts = tf.placeholder(tf.float32, shape=[self.batch_size, 10])
         port = self.ph_initial_thrusts
         stbd = self.ph_initial_thrusts
 
@@ -375,7 +376,7 @@ class BPTT_Controller():
 
         # Initialize optimizer
         self.average_total_reward = tf.reduce_mean(total_reward)
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005, epsilon=1)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
         self.update = optimizer.minimize(-self.average_total_reward)
         self.sess.run(tf.global_variables_initializer())
 
@@ -404,15 +405,17 @@ class BPTT_Controller():
                 axes.append(ax)
             plt.xlabel('iterations')
 
-        initial_thrusts = np.zeros([self.batch_size, 20])
+        initial_thrusts = np.zeros([self.batch_size, 10])
         initial_lasts = np.zeros([self.batch_size, 4])
 
         # Train
         iterations = []
         average_total_rewards = []
-        for i in range(train_iterations + 1):
-            
+        for i in range(train_iterations + 1):            
             # Get results
+
+            initial_state = self.random_state
+
             actions, rewards, trajectory, heading_error, sigma_port, sigma_stbd, average_total_reward = self.sess.run(
                 [self.actions, self.rewards, self.trajectory, self.e_psi, self.sigma_ports, self.sigma_stbds, self.average_total_reward],
                 feed_dict={self.ph_initial_state: initial_state, self.ph_initial_thrusts: initial_thrusts, self.ph_initial_lasts: initial_lasts})
@@ -456,7 +459,7 @@ class BPTT_Controller():
             if (i > 1 and i % 1000 == 0):
                 #self.train_target = self.get_train_target()
                 self.random_state = self.get_random_state()
-                initial_state = self.random_state
+                #initial_state = self.random_state
                 self.save_model('example'+ str(i)) #find a way to  
 
 
