@@ -41,6 +41,17 @@ class Physics():
         self.B = 0.41
         self.c = 0.78
 
+        self.k_u = 0.1
+        self.k_psi = 0.2
+        self.kmin_u = 0.05
+        self.kmin_psi = 0.2
+        self.k2_u = 0.02
+        self.k2_psi = 0.1
+        self.mu_u = 0.05
+        self.mu_psi = 0.1
+        self.lambda_u = 0.001
+        self.lambda_psi = 1
+
         self.reset()
 
     def reset(self):
