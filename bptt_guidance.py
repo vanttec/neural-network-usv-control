@@ -408,7 +408,7 @@ class BPTT_Controller():
             ylabels = ['psi', 'u', 'v', 'r', 'ye',
                        'Tport', 'Tstbd', 'avg. total reward']
             axes = []
-            for i in range(11):
+            for i in range(8):
                 ax = fig.add_subplot(3, 3, i + 1)
                 ax.xaxis.set_label_coords(1.05, -0.025)
                 plt.xlabel('time')
@@ -432,8 +432,7 @@ class BPTT_Controller():
 
             actions, rewards, trajectory, average_total_reward = self.sess.run(
                 [self.actions, self.rewards, self.trajectory, self.average_total_reward],
-                feed_dict={self.ph_initial_state: initial_state, self.ph_initial_position: initial_position, 
-                self.ph_initial_aux: initial_auxs, self.ph_initial_lasts: initial_lasts})
+                feed_dict={self.ph_initial_state: initial_state, self.ph_initial_position: initial_position, self.ph_initial_aux: initial_auxs, self.ph_initial_lasts: initial_lasts})
 
             # Update weight variables
             if i != train_iterations:
@@ -464,7 +463,7 @@ class BPTT_Controller():
 
             if (i > 1 and i % 1000 == 0):
                 #self.train_target = self.get_train_target()
-                self.random_state = self.get_random_state()
+                #self.random_state = self.get_random_state()
                 #initial_state = self.random_state
                 self.save_model('example'+ str(i)) #find a way to  
 
@@ -558,7 +557,7 @@ model_name= None#'example'+ str(9000)
 #        model_name='example'+ str(n)
     # Create objects
 boat = Boat(random_eta_limits=eta_limits, random_upsilon_limits=upsilon_limits)
-ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=250, train_dt=0.01, train_iterations=train_iterations, model_name=model_name)
+ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64, 64], graph_timesteps=200, train_dt=0.01, train_iterations=train_iterations, model_name=model_name)
 ctrl.save_model('example'+ str(train_iterations))
 #    del ctrl
 
