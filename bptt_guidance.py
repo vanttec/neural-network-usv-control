@@ -311,7 +311,7 @@ class BPTT_Controller():
         psi = eta[:, 2]
         psi = tf.where(tf.greater(tf.abs(psi), np.pi), (tf.math.sign(psi))*(tf.math.abs(psi)-2*np.pi), psi)
 
-        ye = -(eta[:, 0] - self.train_target[:, 1])*tf.math.sin(self.random_ak) + (eta[:, 1] - self.train_target[:, 2])*tf.math.cos(self.random_ak)
+        ye = -(eta[:, 0] - np.reshape(self.train_target[:, 1], [self.batch_size, 1]))*tf.math.sin(np.reshape(self.random_ak, [self.batch_size, 1])) + (eta[:, 1] - np.reshape(self.train_target[:, 2], [self.batch_size, 1]))*tf.math.cos(np.reshape(self.random_ak, [self.batch_size, 1]))
 
         psi = tf.reshape(psi, [self.batch_size, 1])
         upsilon = tf.reshape(upsilon, [self.batch_size, 3])
