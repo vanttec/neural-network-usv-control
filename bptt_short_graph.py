@@ -616,7 +616,7 @@ def get_size(obj, seen=None):
     return size
 
 '''To train'''
-'''
+
 # Eta limits
 xlim = [-5, 5]
 ylim = [-5, 5]
@@ -638,4 +638,3 @@ for i in range(4):
     random_initial_state, _, _ = ctrl.get_random_state()
     ctrl.train(random_initial_state, 100)
 ctrl.save_model('example')
-'''
