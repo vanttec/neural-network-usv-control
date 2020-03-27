@@ -24,8 +24,8 @@ class TfToNp():
 
 		#self.boat = boat
 
-		self.action_network_num_inputs = 7
-		self.action_network_num_outputs = 2
+		self.action_network_num_inputs = 5
+		self.action_network_num_outputs = 1
 		self.num_hidden_units = num_hidden_units
 
 		tf.reset_default_graph()
@@ -65,7 +65,7 @@ class TfToNp():
 		self.np_W3 = self.sess.run(self.W3)
 		self.np_b3, = self.sess.run(self.b3)
 
-		np.savez(model_name, w1=self.np_W1, b1=self.np_b1, W2=self.np_W2, b2=self.np_b2, w3=self.np_W3, b3=self.np_b3)
+		np.savez(model_name, w1=self.np_W1, b1=self.np_b1, w2=self.np_W2, b2=self.np_b2, w3=self.np_W3, b3=self.np_b3)
 
 # Eta limits
 xlim = [-2.5, 2.5]

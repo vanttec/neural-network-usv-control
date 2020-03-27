@@ -47,7 +47,7 @@ class BPTT_Controller():
         self.batch_size = batch_size
         self.discount_factor = discount_factor
         self.action_network_num_inputs = 5
-        self.action_network_num_outputs = 2
+        self.action_network_num_outputs = 1
         self.num_hidden_units = num_hidden_units
                 
         if train:
@@ -406,9 +406,9 @@ class BPTT_Controller():
             plt.close()
             fig = plt.figure('Trajectory')
             ylabels = ['psi', 'u', 'v', 'r', 'ye',
-                       'Tport', 'Tstbd', 'avg. total reward']
+                       'psi_d', 'avg. total reward']
             axes = []
-            for i in range(8):
+            for i in range(7):
                 ax = fig.add_subplot(3, 3, i + 1)
                 ax.xaxis.set_label_coords(1.05, -0.025)
                 plt.xlabel('time')
@@ -452,16 +452,16 @@ class BPTT_Controller():
                             del axes[j].lines[0]
                             axes[j].plot(time, trajectory[:, traj, j], 'b-')
                             axes[j].relim()
-                        for j in range(2):
+                        for j in range(1):
                             del axes[j+5].lines[0]
                             axes[j+5].plot(time[:-1], actions[:, traj, j], 'b-')
                             axes[j+5].relim()
-                    del axes[7].lines[0]
-                    axes[7].plot(iterations, average_total_rewards, 'b-')
+                    del axes[6].lines[0]
+                    axes[6].plot(iterations, average_total_rewards, 'b-')
                     plt.pause(1e-10)
                 
 
-            if (i > 1 and i % 1000 == 0):
+            if (i > 1 and i % 500 == 0):
                 #self.train_target = self.get_train_target()
                 #self.random_state = self.get_random_state()
                 #initial_state = self.random_state
