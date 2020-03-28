@@ -169,7 +169,7 @@ class BPTT_Controller():
 
         return action
 
-    def get_reward(self, ye):
+    def get_reward(self, ye, psi, ak):
         '''Calculate the reward given a state
         Size of tensors' first dimension is the batch size for parallel computation
         Params
@@ -180,8 +180,15 @@ class BPTT_Controller():
             rank-1 tensor, reward
         '''
         k_ye = 0.5
+        k_psi = 5.72
+
         ye = tf.math.abs(ye)
-        reward = tf.math.exp(-k_ye*ye)
+        e_psi = tf.math.abs(ak - psi)
+        e_psi = tf.where(tf.greater(e_psi, np.pi), tf.math.abs(e_psi - 2*np.pi), e_psi)
+
+        reward_ye = tf.math.exp(-k_ye*ye)
+        reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-k_psi*e_psi), -tf.math.exp(k_psi*(e_psi-np.pi)))
+        reward = 0.8*reward_ye + 0.2*reward_psi
         return reward
 
     def next_timestep(self, state, action, position, aux, last):
@@ -360,7 +367,7 @@ class BPTT_Controller():
         Ka_dot_psi = tf.reshape(Ka_dot_psi, [self.batch_size, 1])
         next_last = tf.concat([eta_dot, upsilon_dot, e_u, Ka_dot_u, Ka_dot_psi], 1)
 
-        reward = self.get_reward(ye)
+        reward = self.get_reward(ye, psi, ak)
 
         return next_state, reward, next_position, next_aux, next_last
 
