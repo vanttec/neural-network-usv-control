@@ -49,7 +49,7 @@ class BPTT_Controller():
         # Neural network parameters
         self.batch_size = batch_size
         self.discount_factor = discount_factor
-        self.action_network_num_inputs = 5
+        self.action_network_num_inputs = 6
         self.action_network_num_outputs = 1
         self.num_hidden_units = num_hidden_units
 
@@ -57,7 +57,7 @@ class BPTT_Controller():
             self.build_graph(graph_timesteps)
             if model_name is not None:
                 self.restore_model(model_name)
-            self.train(self.random_state, train_iterations)
+            self.train(self.random_state, self.random_position, train_iterations)
             self.to_numpy_model()
         else:
             self.reset_random()
@@ -121,7 +121,8 @@ class BPTT_Controller():
             ye = -(state[0] - self.train_target[i][1])*math.sin(ak) + (state[1] - self.train_target[i][2])*math.cos(ak)
             state[3] = 0
             state = np.append(state, ye)
-            random_state.append(state[2:7])
+            state = np.append(state, ak)
+            random_state.append(state[2:8])
             random_position.append(state[0:2])
             random_ak.append(ak)
         return np.array(random_state), np.array(random_position), np.array(random_ak)
@@ -241,17 +242,18 @@ class BPTT_Controller():
         e_psi_dot = 0 - upsilon[:, 2]
 
         abs_e_psi = tf.math.abs(e_psi)
-        x_squared = tf.math.pow(self.train_target[:, 3]-self.train_target[:, 1], 2)
-        y_squared = tf.math.pow(self.train_target[:, 4]-self.train_target[:, 2], 2)
-        radius = tf.math.pow(x_squared + y_squared, 0.5)
+        #x_squared = tf.math.pow(self.train_target[:, 3]-position[:, 0], 2)
+        #y_squared = tf.math.pow(self.train_target[:, 4]-position[:, 1], 2)
+        #radius = tf.math.pow(x_squared + y_squared, 0.5)
 
         u_psi = 1/(1 + tf.math.exp(10*(abs_e_psi*(2/np.pi) - 0.5)))
-        u_r = 1/(1 + tf.math.exp(-10*(x_squared/5 - 0.5)))
+        #u_r = 1/(1 + tf.math.exp(-10*(x_squared/5 - 0.5)))
 
         u_d_high = (self.train_target[:, 0] - 0.3)*u_psi + 0.3
-        u_d_low = (self.train_target[:, 0] - 0.3)*(0.8*u_r + 0.2*u_psi) + 0.3
+        #u_d_low = (self.train_target[:, 0] - 0.3)*(0.8*u_r + 0.2*u_psi) + 0.3
 
-        u_d = tf.where(tf.greater(radius, 5), u_d_high, u_d_low)
+        #u_d = tf.where(tf.greater(radius, 5), u_d_high, u_d_low)
+        u_d = u_d_high
 
         e_u = u_d - upsilon[:, 0]
         e_u_int = (self.train_dt)*(e_u + e_u_last)/2 + e_u_int
@@ -336,11 +338,12 @@ class BPTT_Controller():
         psi = tf.where(tf.greater(tf.abs(psi), np.pi), (tf.math.sign(psi))*(tf.math.abs(psi)-2*np.pi), psi)
 
         ye = -(eta[:, 0] - np.reshape(self.train_target[:, 1], [self.batch_size, 1]))*tf.math.sin(np.reshape(self.random_ak, [self.batch_size, 1])) + (eta[:, 1] - np.reshape(self.train_target[:, 2], [self.batch_size, 1]))*tf.math.cos(np.reshape(self.random_ak, [self.batch_size, 1]))
-        
+
         psi = tf.reshape(psi, [self.batch_size, 1])
         upsilon = tf.reshape(upsilon, [self.batch_size, 3])
         ye = tf.reshape(ye, [self.batch_size, 1])
-        next_state = tf.concat([psi, upsilon, ye], 1)
+        ak = tf.reshape(self.random_ak, [self.batch_size, 1])
+        next_state = tf.concat([psi, upsilon, ye, ak], 1)
 
         eta = tf.reshape(eta, [self.batch_size, 3])
         next_position = tf.reshape(eta[:, 0:2], [self.batch_size, 2])
@@ -428,7 +431,7 @@ class BPTT_Controller():
         self.update = optimizer.apply_gradients(zip(self.ph_total_grad_weight_list, weight_list))
         self.sess.run(tf.global_variables_initializer())
 
-    def train(self, initial_state, train_iterations):
+    def train(self, initial_state, initial_position, train_iterations):
         '''Train the neural network
         Size of tensors' first dimension is the batch size for parallel computation
         Params
@@ -453,7 +456,6 @@ class BPTT_Controller():
                 axes.append(ax)
             plt.xlabel('iterations')
 
-        initial_position = np.zeros([self.batch_size, 2])
         initial_aux = np.zeros([self.batch_size, 3])
         initial_lasts = np.zeros([self.batch_size, 9])
 
@@ -462,7 +464,6 @@ class BPTT_Controller():
         average_total_rewards = []
         for i in range(train_iterations + 1):
             # Get results
-            initial_state = self.random_state
             actions = []
             rewards = []
             trajectory = []
@@ -555,9 +556,8 @@ class BPTT_Controller():
                     axes[7].plot(iterations, average_total_rewards, 'b-')
                     plt.pause(1e-10)
 
-            if i % 1000 == 0 and i > 1:
-                self.save_model('iteration'+ str(i+1000))
-                #self.random_state, self.random_position, self.random_ak = self.get_random_state()
+            if i % 500 == 0 and i > 1:
+                self.save_model('iteration'+ str(i+1500))
 
     def save_model(self, model_name):
         '''Save weight variables
@@ -650,7 +650,7 @@ xlim = [-5, 5]
 ylim = [-5, 5]
 yawlim = [-np.pi, np.pi]
 # Random upsilon limits
-xvel_lim = [0.4, 1.2]
+xvel_lim = [0.4, 1.4]
 yvel_lim = [-0.0, 0.0]
 yaw_ang_vel_lim = [-0.0, 0.0]
 # Lists of parameters
@@ -662,8 +662,8 @@ boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
 ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64,64], batch_size=100,
                        graph_timesteps=100, discount_factor=1.0, train_dt=0.01, train_runtime=10.0,
-                       train_iterations=train_iterations, model_name='iteration1000', graphical=True)
+                       train_iterations=train_iterations, model_name='iteration1500', graphical=True)
 '''for i in range(4):
     random_initial_state, _, _ = ctrl.get_random_state()
     ctrl.train(random_initial_state, 100)'''
-ctrl.save_model('iteration'+str(train_iterations+1000))
+ctrl.save_model('iteration'+str(train_iterations+1500))
