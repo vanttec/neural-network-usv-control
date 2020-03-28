@@ -557,7 +557,7 @@ class BPTT_Controller():
                     plt.pause(1e-10)
 
             if i % 500 == 0 and i > 1:
-                self.save_model('iteration'+ str(i+1500))
+                self.save_model('iteration'+ str(i))
 
     def save_model(self, model_name):
         '''Save weight variables
@@ -662,8 +662,8 @@ boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
 ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64,64], batch_size=100,
                        graph_timesteps=100, discount_factor=1.0, train_dt=0.01, train_runtime=10.0,
-                       train_iterations=train_iterations, model_name='iteration1500', graphical=True)
+                       train_iterations=train_iterations, model_name=None, graphical=True)
 '''for i in range(4):
     random_initial_state, _, _ = ctrl.get_random_state()
     ctrl.train(random_initial_state, 100)'''
-ctrl.save_model('iteration'+str(train_iterations+1500))
+ctrl.save_model('iteration'+str(train_iterations))
