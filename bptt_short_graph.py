@@ -180,14 +180,14 @@ class BPTT_Controller():
             rank-1 tensor, reward
         '''
         k_ye = 0.5
-        k_psi = 5.72
+        #k_psi = 5.72
 
         ye = tf.math.abs(ye)
         e_psi = tf.math.abs(ak - psi)
         e_psi = tf.where(tf.greater(e_psi, np.pi), tf.math.abs(e_psi - 2*np.pi), e_psi)
 
         reward_ye = tf.math.exp(-k_ye*ye)
-        reward_psi = tf.where(tf.less(e_psi, np.pi/2), tf.math.exp(-k_psi*e_psi), -tf.math.exp(k_psi*(e_psi-np.pi)))
+        reward_psi = tf.math.sign(90-e_psi)
         reward = 0.8*reward_ye + 0.2*reward_psi
         return reward
 
@@ -426,7 +426,7 @@ class BPTT_Controller():
         self.lasts = tf.stack(lasts)
 
         # Initialize optimizer
-        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
+        optimizer = tf.train.AdamOptimizer()
         
         # Compute gradients and new weights
         self.average_total_reward = tf.reduce_mean(total_reward)
@@ -653,8 +653,8 @@ def get_size(obj, seen=None):
 '''To train'''
 
 # Eta limits
-xlim = [-5, 5]
-ylim = [-5, 5]
+xlim = [-2.5, 2.5]
+ylim = [-2.5, 2.5]
 yawlim = [-np.pi, np.pi]
 # Random upsilon limits
 xvel_lim = [0.4, 1.4]
@@ -668,7 +668,7 @@ train_iterations=10000
 boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
 ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64,64], batch_size=100,
-                       graph_timesteps=100, discount_factor=1.0, train_dt=0.01, train_runtime=10.0,
+                       graph_timesteps=100, discount_factor=0.99, train_dt=0.01, train_runtime=10.0,
                        train_iterations=train_iterations, model_name=None, graphical=True)
 '''for i in range(4):
     random_initial_state, _, _ = ctrl.get_random_state()
