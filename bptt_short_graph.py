@@ -426,7 +426,7 @@ class BPTT_Controller():
         self.lasts = tf.stack(lasts)
 
         # Initialize optimizer
-        optimizer = tf.train.AdamOptimizer()
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
         
         # Compute gradients and new weights
         self.average_total_reward = tf.reduce_mean(total_reward)
