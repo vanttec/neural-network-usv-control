@@ -49,7 +49,7 @@ class BPTT_Controller():
         # Neural network parameters
         self.batch_size = batch_size
         self.discount_factor = discount_factor
-        self.action_network_num_inputs = 6
+        self.action_network_num_inputs = 5
         self.action_network_num_outputs = 1
         self.num_hidden_units = num_hidden_units
 
@@ -84,16 +84,7 @@ class BPTT_Controller():
             state = self.boat.state.copy()
             self.boat.reset_random()
             end = self.boat.state.copy()
-            if i <= self.batch_size/2:
-                if end[0] >= 0:
-                    end[0] = end[0]*4 + 10
-                else:
-                    end[0] = end[0]*4 - 10
-            else:
-                if end[1] >= 0:
-                    end[1] = end[1]*4 + 10
-                else:
-                    end[1] = end[1]*4 - 10
+            end[0] = abs(end[0])*4 + 10
             train_target = [np.float32(state[3]), np.float32(state[0]), np.float32(state[1]), np.float32(end[0]), np.float32(end[1])]
             random_target.append(train_target)
         return np.array(random_target)
@@ -112,20 +103,22 @@ class BPTT_Controller():
         '''
         random_state = []
         random_position = []
-        random_ak = []
         for i in range(self.batch_size):
             self.boat.reset_random()
             state = self.boat.state.copy()
             ak = math.atan2(self.train_target[i][4]-self.train_target[i][2],self.train_target[i][3]-self.train_target[i][1])
             ak = np.float32(ak)
+            ak_psi = ak - state[2]
+            ak_psi = np.where(np.greater(np.abs(ak_psi), np.pi), np.sign(ak_psi)*(np.abs(ak_psi)-2*np.pi), ak_psi)
+            ak_psi = np.float32(ak_psi)
             ye = -(state[0] - self.train_target[i][1])*math.sin(ak) + (state[1] - self.train_target[i][2])*math.cos(ak)
             state[3] = 0
             state = np.append(state, ye)
-            state = np.append(state, ak)
-            random_state.append(state[2:8])
-            random_position.append(state[0:2])
-            random_ak.append(ak)
-        return np.array(random_state), np.array(random_position), np.array(random_ak)
+            state = np.append(state, ak_psi)
+            position = np.append(state[0:3], ak)
+            random_state.append(state[3:8])
+            random_position.append(position)
+        return np.array(random_state), np.array(random_position)
     
     def reset_random(self):
         '''Reset parameters to random values and
@@ -142,7 +135,7 @@ class BPTT_Controller():
         self.b3 = weight_variable([1, self.action_network_num_outputs])
 
         self.train_target = self.get_train_target()
-        self.random_state, self.random_position, self.random_ak = self.get_random_state()
+        self.random_state, self.random_position = self.get_random_state()
 
         try:
             self.sess.close()
@@ -169,7 +162,7 @@ class BPTT_Controller():
 
         return action
 
-    def get_reward(self, ye, psi, ak):
+    def get_reward(self, ye, ak_psi):
         '''Calculate the reward given a state
         Size of tensors' first dimension is the batch size for parallel computation
         Params
@@ -180,14 +173,12 @@ class BPTT_Controller():
             rank-1 tensor, reward
         '''
         k_ye = 0.5
-        #k_psi = 5.72
 
         ye = tf.math.abs(ye)
-        e_psi = tf.math.abs(ak - psi)
-        e_psi = tf.where(tf.greater(e_psi, np.pi), tf.math.abs(e_psi - 2*np.pi), e_psi)
+        ak_psi = tf.math.abs(ak_psi)
 
         reward_ye = tf.math.exp(-k_ye*ye)
-        reward_psi = tf.math.sign(90-e_psi)
+        reward_psi = tf.math.sign(np.pi/2-ak_psi)
         reward = 0.8*reward_ye + 0.2*reward_psi
         return reward
 
@@ -202,13 +193,14 @@ class BPTT_Controller():
         ======
             rank-2 tensor, next state in the form [position,orientation,vel,ang_vel]
         '''
-        position = position[:, 0:2]
-        psi = tf.reshape(state[:, 0], [self.batch_size, 1])
-        eta =  tf.concat([position, psi], 1)
-        upsilon = state[:, 1:4]
-        ye = tf.reshape(state[:, 4], [self.batch_size, 1])
+        eta = position[:, 0:3]
+        ak = tf.reshape(position[:, 3], [self.batch_size, 1])
+        upsilon = state[:, 0:3]
+        #ye = tf.reshape(state[:, 3], [self.batch_size, 1])
+        #e_psi = tf.reshape(state[:, 4], [self.batch_size, 1])
 
-        psi_d = action[:, 0]
+        psi_d = action[:, 0] + eta[:, 2]
+        psi_d = tf.where(tf.greater(tf.math.abs(psi_d), np.pi), (tf.math.sign(psi_d))*(tf.math.abs(psi_d)-2*np.pi), psi_d)
 
         e_u_int = aux[:, 0]
         Ka_u = aux[:, 1]
@@ -343,17 +335,20 @@ class BPTT_Controller():
 
         psi = eta[:, 2]
         psi = tf.where(tf.greater(tf.abs(psi), np.pi), (tf.math.sign(psi))*(tf.math.abs(psi)-2*np.pi), psi)
-
-        ye = -(eta[:, 0] - np.reshape(self.train_target[:, 1], [self.batch_size, 1]))*tf.math.sin(np.reshape(self.random_ak, [self.batch_size, 1])) + (eta[:, 1] - np.reshape(self.train_target[:, 2], [self.batch_size, 1]))*tf.math.cos(np.reshape(self.random_ak, [self.batch_size, 1]))
-
         psi = tf.reshape(psi, [self.batch_size, 1])
+        ak_psi = ak - psi
+        ak_psi = tf.where(tf.greater(tf.abs(ak_psi), np.pi), (tf.math.sign(ak_psi))*(tf.math.abs(ak_psi)-2*np.pi), ak_psi)
+
+        ye = -(eta[:, 0] - np.reshape(self.train_target[:, 1], [self.batch_size, 1]))*tf.math.sin(ak) + (eta[:, 1] - np.reshape(self.train_target[:, 2], [self.batch_size, 1]))*tf.math.cos(ak)
+
         upsilon = tf.reshape(upsilon, [self.batch_size, 3])
         ye = tf.reshape(ye, [self.batch_size, 1])
-        ak = tf.reshape(self.random_ak, [self.batch_size, 1])
-        next_state = tf.concat([psi, upsilon, ye, ak], 1)
+        ak_psi = tf.reshape(ak_psi, [self.batch_size, 1])
+        next_state = tf.concat([upsilon, ye, ak_psi], 1)
 
         eta = tf.reshape(eta, [self.batch_size, 3])
-        next_position = tf.reshape(eta[:, 0:2], [self.batch_size, 2])
+        eta = tf.reshape(eta[:, 0:2], [self.batch_size, 2])
+        next_position = tf.concat([eta, psi, ak], 1)
 
         e_u_int = tf.reshape(e_u_int, [self.batch_size, 1])
         Ka_u = tf.reshape(Ka_u, [self.batch_size, 1])
@@ -367,7 +362,7 @@ class BPTT_Controller():
         Ka_dot_psi = tf.reshape(Ka_dot_psi, [self.batch_size, 1])
         next_last = tf.concat([eta_dot, upsilon_dot, e_u, Ka_dot_u, Ka_dot_psi], 1)
 
-        reward = self.get_reward(ye, psi, ak)
+        reward = self.get_reward(ye, ak_psi)
 
         return next_state, reward, next_position, next_aux, next_last
 
@@ -386,7 +381,7 @@ class BPTT_Controller():
             tf.float32, shape=[self.batch_size, self.action_network_num_inputs])
         state = self.ph_initial_state
 
-        self.ph_initial_position = tf.placeholder(tf.float32, shape=[self.batch_size, 2])
+        self.ph_initial_position = tf.placeholder(tf.float32, shape=[self.batch_size, 4])
         position = self.ph_initial_position
 
         self.ph_initial_aux = tf.placeholder(tf.float32, shape=[self.batch_size, 3])
@@ -450,8 +445,8 @@ class BPTT_Controller():
         if self.graphical:
             plt.close()
             fig = plt.figure('Trajectory')
-            ylabels = ['psi', 'u', 'v', 'r', 'ye',
-                       'psi_d', 'reward', 'avg. total reward']
+            ylabels = ['u', 'v', 'r', 'ye', 'ak-psi',
+                       'e_psi', 'reward', 'avg. total reward']
             axes = []
             for i in range(8):
                 ax = fig.add_subplot(3, 3, i + 1)
@@ -563,9 +558,6 @@ class BPTT_Controller():
                     axes[7].plot(iterations, average_total_rewards, 'b-')
                     plt.pause(1e-10)
 
-            if i % 500 == 0 and i > 1:
-                self.save_model('iteration'+ str(i))
-
     def save_model(self, model_name):
         '''Save weight variables
         Params
@@ -655,7 +647,7 @@ def get_size(obj, seen=None):
 # Eta limits
 xlim = [-2.5, 2.5]
 ylim = [-2.5, 2.5]
-yawlim = [-np.pi, np.pi]
+yawlim = [-np.pi/4, np.pi/4]
 # Random upsilon limits
 xvel_lim = [0.4, 1.4]
 yvel_lim = [-0.0, 0.0]
@@ -663,14 +655,17 @@ yaw_ang_vel_lim = [-0.0, 0.0]
 # Lists of parameters
 eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
-train_iterations=10000
+starting_weights = 0
+train_iterations=1000
+total_train_iterations=10000
 # Create objects
 boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
 ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64,64], batch_size=100,
                        graph_timesteps=100, discount_factor=0.99, train_dt=0.01, train_runtime=10.0,
                        train_iterations=train_iterations, model_name=None, graphical=True)
-'''for i in range(4):
-    random_initial_state, _, _ = ctrl.get_random_state()
-    ctrl.train(random_initial_state, 100)'''
-ctrl.save_model('iteration'+str(train_iterations))
+ctrl.save_model('iteration'+str(train_iterations+starting_weights))
+for i in range(int(total_train_iterations/train_iterations)):
+    random_initial_state, random_initial_position = ctrl.get_random_state()
+    ctrl.train(random_initial_state, random_initial_position, train_iterations)
+    ctrl.save_model('iteration'+str(train_iterations*(i+2)+starting_weights))
