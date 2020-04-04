@@ -108,7 +108,7 @@ class BPTT_Controller():
             state = self.boat.state.copy()
             ak = math.atan2(self.train_target[i][4]-self.train_target[i][2],self.train_target[i][3]-self.train_target[i][1])
             ak = np.float32(ak)
-            ak_psi = ak - state[2]
+            ak_psi = state[2] - ak
             ak_psi = np.where(np.greater(np.abs(ak_psi), np.pi), np.sign(ak_psi)*(np.abs(ak_psi)-2*np.pi), ak_psi)
             ak_psi = np.float32(ak_psi)
             ye = -(state[0] - self.train_target[i][1])*math.sin(ak) + (state[1] - self.train_target[i][2])*math.cos(ak)
@@ -178,8 +178,7 @@ class BPTT_Controller():
         ak_psi = tf.math.abs(ak_psi)
 
         reward_ye = tf.math.exp(-k_ye*ye)
-        reward_psi = tf.math.sign(np.pi/2-ak_psi)
-        reward = 0.8*reward_ye + 0.2*reward_psi
+        reward = tf.where(tf.greater(ak_psi, np.pi/2), 0*reward_ye, reward_ye)
         return reward
 
     def next_timestep(self, state, action, position, aux, last):
@@ -336,7 +335,7 @@ class BPTT_Controller():
         psi = eta[:, 2]
         psi = tf.where(tf.greater(tf.abs(psi), np.pi), (tf.math.sign(psi))*(tf.math.abs(psi)-2*np.pi), psi)
         psi = tf.reshape(psi, [self.batch_size, 1])
-        ak_psi = ak - psi
+        ak_psi = psi - ak
         ak_psi = tf.where(tf.greater(tf.abs(ak_psi), np.pi), (tf.math.sign(ak_psi))*(tf.math.abs(ak_psi)-2*np.pi), ak_psi)
 
         ye = -(eta[:, 0] - np.reshape(self.train_target[:, 1], [self.batch_size, 1]))*tf.math.sin(ak) + (eta[:, 1] - np.reshape(self.train_target[:, 2], [self.batch_size, 1]))*tf.math.cos(ak)
@@ -421,7 +420,7 @@ class BPTT_Controller():
         self.lasts = tf.stack(lasts)
 
         # Initialize optimizer
-        optimizer = tf.train.AdamOptimizer()
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.00001)
         
         # Compute gradients and new weights
         self.average_total_reward = tf.reduce_mean(total_reward)
@@ -649,21 +648,21 @@ xlim = [-2.5, 2.5]
 ylim = [-2.5, 2.5]
 yawlim = [-np.pi/4, np.pi/4]
 # Random upsilon limits
-xvel_lim = [0.4, 1.4]
+xvel_lim = [0.4, 1.2]
 yvel_lim = [-0.0, 0.0]
 yaw_ang_vel_lim = [-0.0, 0.0]
 # Lists of parameters
 eta_limits = [xlim, ylim, yawlim]
 upsilon_limits = [xvel_lim, yvel_lim, yaw_ang_vel_lim]
-starting_weights = 0
-train_iterations=1000
+starting_weights = 4000
+train_iterations=500
 total_train_iterations=10000
 # Create objects
 boat = Boat(random_eta_limits=eta_limits,
             random_upsilon_limits=upsilon_limits)
 ctrl = BPTT_Controller(boat, train=True, num_hidden_units=[64,64], batch_size=100,
-                       graph_timesteps=100, discount_factor=0.99, train_dt=0.01, train_runtime=10.0,
-                       train_iterations=train_iterations, model_name=None, graphical=True)
+                       graph_timesteps=100, discount_factor=0.9999, train_dt=0.01, train_runtime=20.0,
+                       train_iterations=train_iterations, model_name='iteration4000', graphical=True)
 ctrl.save_model('iteration'+str(train_iterations+starting_weights))
 for i in range(int(total_train_iterations/train_iterations)):
     random_initial_state, random_initial_position = ctrl.get_random_state()
